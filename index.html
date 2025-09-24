@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Warspear Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { width: 100%; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    // Create map with a simple 2D coordinate system
+    var map = L.map('map', {
+      crs: L.CRS.Simple,
+      minZoom: -5
+    });
+
+    // Size of your stitched image in pixels (replace with your actual width/height)
+    var w = 5000, h = 4000;
+    var bounds = [[0,0], [h, w]];
+
+    // Add the image
+    L.imageOverlay('warspear_map.png', bounds).addTo(map);
+    map.fitBounds(bounds);
+
+    // Example markers
+    L.marker([2500, 2000]).addTo(map).bindPopup("Main City");
+    L.marker([3200, 1200]).addTo(map).bindPopup("Dungeon Entrance");
+    L.marker([1000, 3500]).addTo(map).bindPopup("Quest Area");
+  </script>
+</body>
+</html>

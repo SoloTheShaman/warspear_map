@@ -1,17 +1,168 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Warspear Map</title>
+  <title>Warspear Interactive Map</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    #map { width: 100%; height: 100vh; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+    }
+    
+    #map { 
+      width: 100%; 
+      height: 100vh; 
+    }
+    
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      width: 300px;
+    }
+    
+    #marker-list {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 10px;
+    }
+    
+    .marker-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .marker-item:last-child {
+      border-bottom: none;
+    }
+    
+    .marker-name {
+      flex-grow: 1;
+      margin-right: 10px;
+    }
+    
+    .marker-actions button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin-left: 5px;
+      color: #555;
+    }
+    
+    .marker-actions button:hover {
+      color: #000;
+    }
+    
+    button {
+      background: #4a6fa5;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+      width: 100%;
+    }
+    
+    button:hover {
+      background: #3a5a8a;
+    }
+    
+    input {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    h3 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+    
+    .instructions {
+      font-size: 12px;
+      color: #666;
+      margin-top: 10px;
+    }
+    
+    .toggle-controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 999;
+      background: rgba(255, 255, 255, 0.9);
+      border: none;
+      border-radius: 4px;
+      padding: 8px;
+      cursor: pointer;
+      display: none;
+    }
+    
+    @media (max-width: 768px) {
+      #controls {
+        width: calc(100% - 20px);
+        left: 10px;
+        right: 10px;
+      }
+      
+      .toggle-controls {
+        display: block;
+      }
+      
+      #controls.hidden {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
+  <button class="toggle-controls" id="toggleControls">
+    <i class="fas fa-bars"></i>
+  </button>
+  
+  <div id="controls">
+    <h3><i class="fas fa-map-marker-alt"></i> Map Markers</h3>
+    
+    <div>
+      <input type="text" id="markerName" placeholder="Enter marker name">
+      <button id="addMarkerBtn"><i class="fas fa-plus"></i> Add Marker (Click on Map)</button>
+    </div>
+    
+    <div class="instructions">
+      <p>Click the button above, then click anywhere on the map to add a marker.</p>
+    </div>
+    
+    <h4>Your Markers:</h4>
+    <div id="marker-list"></div>
+    
+    <button id="clearMarkersBtn"><i class="fas fa-trash"></i> Clear All Markers</button>
+    <button id="exportMarkersBtn"><i class="fas fa-download"></i> Export Markers</button>
+    <button id="importMarkersBtn"><i class="fas fa-upload"></i> Import Markers</button>
+    <input type="file" id="importFile" accept=".json" style="display: none;">
+  </div>
+  
   <div id="map"></div>
+
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    // Create map with a simple 2D coordinate system
+    // Initialize the map
     var map = L.map('map', {
       crs: L.CRS.Simple,
       minZoom: -5
@@ -21,14 +172,177 @@
     var w = 5000, h = 4000;
     var bounds = [[0,0], [h, w]];
 
-    // Add the image
-    L.imageOverlay('warspear_map.png', bounds).addTo(map);
+    // Add the image - replace with your actual image URL
+    L.imageOverlay('https://via.placeholder.com/5000x4000/2c3e50/ffffff?text=Warspear+Map', bounds).addTo(map);
     map.fitBounds(bounds);
 
-    // Example markers
-    L.marker([2500, 2000]).addTo(map).bindPopup("Main City");
-    L.marker([3200, 1200]).addTo(map).bindPopup("Dungeon Entrance");
-    L.marker([1000, 3500]).addTo(map).bindPopup("Quest Area");
+    // Store markers and their data
+    let markers = [];
+    let isAddingMarker = false;
+    
+    // Load markers from localStorage if available
+    function loadMarkers() {
+      const savedMarkers = localStorage.getItem('warspearMapMarkers');
+      if (savedMarkers) {
+        markers = JSON.parse(savedMarkers);
+        renderMarkers();
+      }
+    }
+    
+    // Save markers to localStorage
+    function saveMarkers() {
+      localStorage.setItem('warspearMapMarkers', JSON.stringify(markers));
+    }
+    
+    // Render all markers on the map and in the list
+    function renderMarkers() {
+      // Clear existing markers from map
+      map.eachLayer(layer => {
+        if (layer instanceof L.Marker) {
+          map.removeLayer(layer);
+        }
+      });
+      
+      // Clear marker list
+      const markerList = document.getElementById('marker-list');
+      markerList.innerHTML = '';
+      
+      // Add markers to map and list
+      markers.forEach((markerData, index) => {
+        // Add to map
+        const marker = L.marker(markerData.position).addTo(map);
+        marker.bindPopup(`<b>${markerData.name}</b><br>Coordinates: ${markerData.position[0].toFixed(0)}, ${markerData.position[1].toFixed(0)}`);
+        
+        // Add to list
+        const markerItem = document.createElement('div');
+        markerItem.className = 'marker-item';
+        markerItem.innerHTML = `
+          <span class="marker-name">${markerData.name}</span>
+          <div class="marker-actions">
+            <button class="view-marker" data-index="${index}"><i class="fas fa-eye"></i></button>
+            <button class="delete-marker" data-index="${index}"><i class="fas fa-trash"></i></button>
+          </div>
+        `;
+        markerList.appendChild(markerItem);
+      });
+      
+      // Add event listeners to the action buttons
+      document.querySelectorAll('.view-marker').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const index = parseInt(this.getAttribute('data-index'));
+          const markerData = markers[index];
+          map.setView(markerData.position, map.getZoom());
+          map.openPopup(`<b>${markerData.name}</b><br>Coordinates: ${markerData.position[0].toFixed(0)}, ${markerData.position[1].toFixed(0)}`, markerData.position);
+        });
+      });
+      
+      document.querySelectorAll('.delete-marker').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const index = parseInt(this.getAttribute('data-index'));
+          markers.splice(index, 1);
+          saveMarkers();
+          renderMarkers();
+        });
+      });
+    }
+    
+    // Add marker when clicking on the map
+    function addMarker(e) {
+      if (!isAddingMarker) return;
+      
+      const markerName = document.getElementById('markerName').value.trim() || `Marker ${markers.length + 1}`;
+      
+      // Add marker to our array
+      markers.push({
+        name: markerName,
+        position: [e.latlng.lat, e.latlng.lng]
+      });
+      
+      // Save and render
+      saveMarkers();
+      renderMarkers();
+      
+      // Reset adding state
+      isAddingMarker = false;
+      document.getElementById('addMarkerBtn').textContent = 'Add Marker (Click on Map)';
+      document.getElementById('markerName').value = '';
+      
+      // Show the new marker
+      map.openPopup(`<b>${markerName}</b><br>Coordinates: ${e.latlng.lat.toFixed(0)}, ${e.latlng.lng.toFixed(0)}`, e.latlng);
+    }
+    
+    // Event Listeners
+    document.getElementById('addMarkerBtn').addEventListener('click', function() {
+      isAddingMarker = true;
+      this.textContent = 'Click on the map to place marker';
+      document.getElementById('markerName').focus();
+    });
+    
+    document.getElementById('clearMarkersBtn').addEventListener('click', function() {
+      if (confirm('Are you sure you want to delete all markers?')) {
+        markers = [];
+        saveMarkers();
+        renderMarkers();
+      }
+    });
+    
+    document.getElementById('exportMarkersBtn').addEventListener('click', function() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(markers, null, 2));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", "warspear_map_markers.json");
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+    });
+    
+    document.getElementById('importMarkersBtn').addEventListener('click', function() {
+      document.getElementById('importFile').click();
+    });
+    
+    document.getElementById('importFile').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const importedMarkers = JSON.parse(e.target.result);
+          if (Array.isArray(importedMarkers)) {
+            markers = importedMarkers;
+            saveMarkers();
+            renderMarkers();
+            alert('Markers imported successfully!');
+          } else {
+            alert('Invalid file format.');
+          }
+        } catch (error) {
+          alert('Error importing markers: ' + error.message);
+        }
+      };
+      reader.readAsText(file);
+      this.value = ''; // Reset file input
+    });
+    
+    document.getElementById('toggleControls').addEventListener('click', function() {
+      const controls = document.getElementById('controls');
+      controls.classList.toggle('hidden');
+    });
+    
+    // Initialize
+    map.on('click', addMarker);
+    loadMarkers();
+    
+    // Add example markers if none exist
+    if (markers.length === 0) {
+      markers = [
+        { name: "Main City", position: [2500, 2000] },
+        { name: "Dungeon Entrance", position: [3200, 1200] },
+        { name: "Quest Area", position: [1000, 3500] }
+      ];
+      saveMarkers();
+      renderMarkers();
+    }
   </script>
 </body>
 </html>
